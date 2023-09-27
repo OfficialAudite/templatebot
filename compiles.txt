@@ -1,0 +1,10 @@
+cmake -DCMAKE_BUILD_TYPE=Release iirc .. - TO Building Release
+make
+strip mizu - TO Strip Binary
+
+cmake .. - TO Building Debug
+cmake -DCMAKE_BUILD_TYPE=Release .. - TO Building Release
+make
+strip mizu - TO Strip Binary
+
+upx mizu

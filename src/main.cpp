@@ -1,42 +1,67 @@
-#include <templatebot/templatebot.h>
-#include <sstream>
+#include <iostream>
+#include <chrono>
+#include <iomanip>
+#include <thread>
 
-/* When you invite the bot, be sure to invite it with the
- * scopes 'bot' and 'applications.commands', e.g.
- * https://discord.com/oauth2/authorize?client_id=940762342495518720&scope=bot+applications.commands&permissions=139586816064
- */
+#include "mizu/console.h"
+#include "mizu/database.h"
+#include "mizu/slash_commands.h"      // If these files contain relevant logic.
+#include "mizu/command_handlers.h"    // If these files contain relevant logic.
+
+#include <dpp/dpp.h>
+#include <dpp/utility.h>
+#include <dpp/dispatcher.h>
+
+#include <sstream>
+#include <dpp/nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
-int main(int argc, char const *argv[])
-{
+class MyBot {
+private:
+    dpp::cluster bot;
+
+public:
+    MyBot(const std::string& token)
+        : bot(token, dpp::i_default_intents | dpp::i_message_content) {
+
+        bot.on_log(dpp::utility::cout_logger());
+
+        // Registering slash command handlers
+        RegisterSlashCommands(bot);
+
+        // Register the on_ready handler
+        RegisterOnReadyHandler(bot);
+
+        bot.on_message_create([&](const dpp::message_create_t& event) {
+            Database::getInstance()->initUser(event, bot); // Use getInstance() to access the Database
+        });
+    }
+
+    void start() {
+        bot.start(dpp::st_wait);
+    }
+
+    dpp::cluster& getBot() {
+        return bot;
+    }
+};
+
+int main() {
     json configdocument;
     std::ifstream configfile("../config.json");
     configfile >> configdocument;
 
-    /* Setup the bot */
-    dpp::cluster bot(configdocument["token"]);
+    MyBot bot(configdocument["token"]);
 
-    /* Output simple log messages to stdout */
-    bot.on_log(dpp::utility::cout_logger());
+    Database::getInstance()->initializeTables(); // Use getInstance() to access the Database
 
-    /* Handle slash command */
-    bot.on_slashcommand([](const dpp::slashcommand_t& event) {
-         if (event.command.get_command_name() == "ping") {
-            event.reply("Pong!");
-        }
-    });
+    std::thread consoleInputThread(console_thread, std::ref(bot.getBot()));
+    consoleInputThread.detach();
 
-    /* Register slash command here in on_ready */
-    bot.on_ready([&bot](const dpp::ready_t& event) {
-        /* Wrap command registration in run_once to make sure it doesnt run on every full reconnection */
-        if (dpp::run_once<struct register_bot_commands>()) {
-            bot.global_command_create(dpp::slashcommand("ping", "Ping pong!", bot.me.id));
-        }
-    });
+    bot.start();
 
-    /* Start the bot */
-    bot.start(dpp::st_wait);
+    std::cout << "done" << std::endl;
 
     return 0;
 }
